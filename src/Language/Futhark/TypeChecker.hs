@@ -94,16 +94,16 @@ checkForDuplicateDecs =
               bad $ DupDefinitionError namespace name loc loc'
             _ -> return $ M.insert (namespace, name) loc known
 
-        f (FunDec (FunBind _ name _ _ _ _ _ loc)) =
+        f (FunDec (FunBind _ name _ _ _ _ _ loc _)) =
           check Term name loc
 
-        f (ValDec (ValBind _ name _ _ _ loc)) =
+        f (ValDec (ValBind _ name _ _ _ loc _)) =
           check Term name loc
 
-        f (TypeDec (TypeBind name _ _ loc)) =
+        f (TypeDec (TypeBind name _ _ loc _)) =
           check Type name loc
 
-        f (SigDec (SigBind name _ loc)) =
+        f (SigDec (SigBind name _ loc _)) =
           check Signature name loc
 
         f (ModDec (ModBind name _ _ _ loc)) =
@@ -128,7 +128,7 @@ checkSpecs :: [SpecBase NoInfo Name] -> TypeM (TySet, Env, [SpecBase Info VName]
 
 checkSpecs [] = return (mempty, mempty, [])
 
-checkSpecs (ValSpec name tparams params rettype loc : specs) =
+checkSpecs (ValSpec name tparams params rettype loc doc : specs) =
   bindSpaced [(Term, name)] $ do
     name' <- checkName Term name loc
     (tparams', params', rettype') <-
@@ -148,7 +148,7 @@ checkSpecs (ValSpec name tparams params rettype loc : specs) =
     (abstypes, env, specs') <- localEnv (valenv<>) $ checkSpecs specs
     return (abstypes,
             env <> valenv,
-            ValSpec name' tparams' params' rettype' loc : specs')
+            ValSpec name' tparams' params' rettype' loc doc : specs')
 
 checkSpecs (TypeAbbrSpec tdec : specs) =
   bindSpaced [(Type, typeAlias tdec)] $ do
@@ -158,7 +158,7 @@ checkSpecs (TypeAbbrSpec tdec : specs) =
             tenv <> env,
             TypeAbbrSpec tdec' : specs')
 
-checkSpecs (TypeSpec name ps loc : specs) =
+checkSpecs (TypeSpec name ps loc doc : specs) =
   checkTypeParams ps $ \ps' ->
   bindSpaced [(Type, name)] $ do
     name' <- checkName Type name loc
@@ -172,7 +172,7 @@ checkSpecs (TypeSpec name ps loc : specs) =
     (abstypes, env, specs') <- localEnv (tenv<>) $ checkSpecs specs
     return (S.insert (qualName abs_name) abstypes,
             tenv <> env,
-            TypeSpec name' ps' loc : specs')
+            TypeSpec name' ps' loc doc : specs')
       where paramToArg (TypeParamDim v ploc) =
               TypeArgDim (NamedDim $ qualName v) ploc
             paramToArg (TypeParamType v ploc) =
@@ -239,7 +239,7 @@ checkSigExpToEnv e = do
     ModFun{}   -> bad $ UnappliedFunctor $ srclocOf e
 
 checkSigBind :: SigBindBase NoInfo Name -> TypeM (Env, SigBindBase Info VName)
-checkSigBind (SigBind name e loc) = do
+checkSigBind (SigBind name e loc doc) = do
   (env, e') <- checkSigExp e
   bindSpaced [(Signature, name)] $ do
     name' <- checkName Signature name loc
@@ -252,7 +252,7 @@ checkSigBind (SigBind name e loc) = do
                    , envNameMap = M.fromList [((Signature, name), name'),
                                                ((Structure, name), name')]
                    },
-            SigBind name' e' loc)
+            SigBind name' e' loc doc)
   where typeAbbrEnvFromSig (MTy _ (ModEnv env)) =
           let types = envTypeAbbrs env
               names = M.fromList $ map nameMapping $ M.toList types
@@ -392,13 +392,13 @@ checkForDuplicateSpecs =
               bad $ DupDefinitionError namespace name loc loc'
             _ -> return $ M.insert (namespace, name) loc known
 
-        f (ValSpec name _ _ _ loc) =
+        f (ValSpec name _ _ _ loc _) =
           check Term name loc
 
-        f (TypeAbbrSpec (TypeBind name _ _ loc)) =
+        f (TypeAbbrSpec (TypeBind name _ _ loc _)) =
           check Type name loc
 
-        f (TypeSpec name _ loc) =
+        f (TypeSpec name _ loc _) =
           check Type name loc
 
         f (ModSpec name _ loc) =
@@ -409,7 +409,7 @@ checkForDuplicateSpecs =
 
 checkTypeBind :: TypeBindBase NoInfo Name
               -> TypeM (Env, TypeBindBase Info VName)
-checkTypeBind (TypeBind name ps td loc) =
+checkTypeBind (TypeBind name ps td loc doc) =
   checkTypeParams ps $ \ps' -> do
     td' <- bindingTypeParams ps' $ checkTypeDecl loc td
     bindSpaced [(Type, name)] $ do
@@ -419,10 +419,10 @@ checkTypeBind (TypeBind name ps td loc) =
                        envNameMap =
                          M.singleton (Type, name) name'
                      },
-              TypeBind name' ps' td' loc)
+              TypeBind name' ps' td' loc doc)
 
 checkValBind :: ValBindBase NoInfo Name -> TypeM (Env, ValBind)
-checkValBind (ValBind entry name maybe_t NoInfo e loc) = do
+checkValBind (ValBind entry name maybe_t NoInfo e loc doc) = do
   name' <- bindSpaced [(Term, name)] $ checkName Term name loc
   (maybe_t', e') <- case maybe_t of
     Just t  -> do
@@ -445,12 +445,12 @@ checkValBind (ValBind entry name maybe_t NoInfo e loc) = do
                  , envNameMap =
                      M.singleton (Term, name) name'
                  },
-          ValBind entry name' maybe_t' (Info e_t) e' loc)
+          ValBind entry name' maybe_t' (Info e_t) e' loc doc)
   where anythingUnique (Record fs) = any anythingUnique fs
         anythingUnique et          = unique et
 
 checkFunBind :: FunBindBase NoInfo Name -> TypeM (Env, FunBind)
-checkFunBind (FunBind entry fname maybe_retdecl NoInfo tparams params body loc) = do
+checkFunBind (FunBind entry fname maybe_retdecl NoInfo tparams params body loc doc) = do
   (fname', tparams', params', maybe_retdecl', rettype, body') <-
     bindSpaced [(Term, fname)] $
     checkFunDef (fname, maybe_retdecl, tparams, params, body, loc)
@@ -464,7 +464,7 @@ checkFunBind (FunBind entry fname maybe_retdecl NoInfo tparams params body loc) 
                  , envNameMap =
                      M.singleton (Term, fname) fname'
                  },
-           FunBind entry fname' maybe_retdecl' (Info rettype) tparams' params' body' loc)
+           FunBind entry fname' maybe_retdecl' (Info rettype) tparams' params' body' loc doc)
 
   where isTypeParam TypeParamType{} = True
         isTypeParam _ = False
